@@ -12,9 +12,13 @@
 #include <thread>
 #include "router.hpp"
 
+static void signalHandler(int sig) {
+	std::cout << "Caught signal " << sig << std::endl;
+}
+
 TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 	m_numThreads = threads;
-	m_socket = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	m_socket	 = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	if (m_socket < 0) { throw std::runtime_error("failed to initialize socket"); }
 
 	m_address.sin6_family = AF_INET6;
@@ -28,7 +32,6 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 
 	int res;
 	res = bind(m_socket, (struct sockaddr *)&m_address, sizeof(m_address));
-	std::cout << "binding to: " << m_address << std::endl;
 	if (res < 0) { throw std::runtime_error(std::string("cannot bind: ") + strerror(errno)); }
 
 	m_epollFD = epoll_create1(0);
@@ -41,11 +44,15 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 		throw std::runtime_error(std::string("cannot add socket to epoll: ") + strerror(errno));
 		close(m_epollFD);
 	}
-	signal(SIGPIPE, SIG_IGN);
+	if (signal(SIGPIPE, signalHandler) == SIG_ERR) {
+		throw std::runtime_error(std::string("cannot ignore SIGPIPE: ") + strerror(errno));
+	}
 }
+
 
 void TCPServer::listen() {
 	if (::listen(m_socket, 5) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
+	std::cout << "Listening on " << m_address << std::endl;
 
 	auto remove = [this](auto it) {
 		epoll_event event;
@@ -56,9 +63,19 @@ void TCPServer::listen() {
 	};
 
 	auto worker = [this, remove]() {
+		// set signal mask to ignore SIGPIPE
+		sigset_t mask;
+		sigemptyset(&mask);
+		sigaddset(&mask, SIGPIPE);
+		if (pthread_sigmask(SIG_BLOCK, &mask, nullptr) != 0) {
+			throw std::runtime_error(std::string("cannot set signal mask: ") + strerror(errno));
+		}
+
 		epoll_event event;
 		while (m_running.test()) {
-			int numEvents = epoll_wait(m_epollFD, &event, 1, 500);
+			std::cout << "Worker thread started." << std::endl;
+			// wait for client interaction or new connection
+			int numEvents = epoll_wait(m_epollFD, &event, 1, -1);
 			if (numEvents == -1) {
 				throw std::runtime_error(std::string("epoll_wait failed: ") + strerror(errno));
 				break;
@@ -73,7 +90,7 @@ void TCPServer::listen() {
 					std::cout << "Client " << it->second.socket.getAddr() << " disconnected." << std::endl;
 					remove(it);
 				}
-				continue;
+				//continue;
 			}
 
 			if (event.data.fd == m_socket) {
