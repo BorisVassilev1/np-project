@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>My First Web Page</title>
+	<link rel="icon" href="bluefish.svg" color="#ffffff">
+</head>
+<body>
+	<h1>Welcome to Number Sorter</h1>
+	<p>Give me your numbers and the server will sort them.<br>
+	Enter numbers separated by spaces<br>
+	</p>
+	<p>Example: 5 3 2 1 4</p>
+	<input type="text" id="numbers" placeholder="Enter numbers here">
+	<button>Sort!</button>
+	<h3>Server Response:</h3>
+	<p id="sorted"></p>
+	<script>
+		document.querySelector('button').addEventListener('click', () => {
+			fetch("/sort", {
+				method: "POST",
+				body: numbers.value,
+			}).then(res => {
+				if(res.ok) {
+					return res;
+				}
+				sorted.innerHTML = res.status + " " + res.statusText;
+				return Promise.reject(res);
+			}).then(data => {
+				return data.json();
+			}).then(jdata => {
+				console.log(jdata);
+				sorted.innerHTML = jdata.join(', ');
+			})
+		})
+	</script>
+</body>
+</html>
