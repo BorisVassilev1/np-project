@@ -82,7 +82,7 @@ class Socket {
 
 	operator int() const { return this->socket; }
 
-	sockaddr_in6 &getAddr() { return this->addr; }
+	const sockaddr_in6 &getAddr() const { return this->addr; }
 	void		  setAddr(const sockaddr_in6 &addr) { this->addr = addr; }
 
    private:

@@ -12,9 +12,7 @@
 #include <thread>
 #include "router.hpp"
 
-static void signalHandler(int sig) {
-	std::cout << "Caught signal " << sig << std::endl;
-}
+static void signalHandler(int sig) { std::cout << "Caught signal " << sig << std::endl; }
 
 TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 	m_numThreads = threads;
@@ -49,20 +47,19 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 	}
 }
 
-
 void TCPServer::listen() {
 	if (::listen(m_socket, 5) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
 	std::cout << "Listening on " << m_address << std::endl;
 
 	auto remove = [this](auto it) {
 		epoll_event event;
-		event.data.fd = it->second.socket;
-		epoll_ctl(m_epollFD, EPOLL_CTL_DEL, int(it->second.socket), &event);
+		event.data.fd = it->second->socket;
+		epoll_ctl(m_epollFD, EPOLL_CTL_DEL, int(it->second->socket), &event);
 
 		m_clients.erase(it);
 	};
 
-	auto worker = [this, remove]() {
+	auto worker = [this, remove](int id) {
 		// set signal mask to ignore SIGPIPE
 		sigset_t mask;
 		sigemptyset(&mask);
@@ -73,24 +70,24 @@ void TCPServer::listen() {
 
 		epoll_event event;
 		while (m_running.test()) {
-			std::cout << "Worker thread started." << std::endl;
 			// wait for client interaction or new connection
-			int numEvents = epoll_wait(m_epollFD, &event, 1, -1);
+			int numEvents = epoll_wait(m_epollFD, &event, 1, 1000);
 			if (numEvents == -1) {
 				throw std::runtime_error(std::string("epoll_wait failed: ") + strerror(errno));
 				break;
 			}
 			if (!numEvents) continue;
+			std::cout << "Worker thread started." << id << std::endl;
 
 			// Client disconnected
 			if (event.events & EPOLLRDHUP) {
 				std::lock_guard lock(m_mutex);
 				auto			it = m_clients.find(event.data.fd);
 				if (it != m_clients.end()) {
-					std::cout << "Client " << it->second.socket.getAddr() << " disconnected." << std::endl;
+					std::cout << "Client " << it->second->socket.getAddr() << " disconnected." << std::endl;
 					remove(it);
 				}
-				//continue;
+				continue;
 			}
 
 			if (event.data.fd == m_socket) {
@@ -104,43 +101,37 @@ void TCPServer::listen() {
 				socket.setAddr(client);
 
 				// Add client socket to epoll
-				event.events  = EPOLLIN | EPOLLONESHOT | EPOLLRDHUP | EPOLLET;
+				event.events  = EPOLLIN | EPOLLRDHUP | EPOLLET;
 				event.data.fd = socket;
 				if (epoll_ctl(m_epollFD, EPOLL_CTL_ADD, socket, &event) == -1) {
-					std::cerr << "Failed to add client socket to epoll instance." << std::endl;
+					std::cerr << "Failed to add client socket to epoll instance." << strerror(errno) << std::endl;
 					close(socket);
 					continue;
 				}
 
 				// Add client to client list
-				ClientData *clientData = nullptr;
+				std::shared_ptr<ClientData> clientData = nullptr;
 				{
 					std::lock_guard lock(m_mutex);
 					int				sock_fd = int(socket);
-					auto [it, inserted]		= m_clients.emplace(int(socket), ClientData(std::move(socket)));
+					auto [it, inserted] =
+						m_clients.emplace(int(socket), std::make_shared<ClientData>(std::move(socket)));
 					if (!inserted) {
 						std::cerr << "Failed to add client to client list." << std::endl;
 						close(sock_fd);
 						continue;
 					}
-					clientData		  = &it->second;
-					it->second.stream = SocketStream(it->second.socket);
-					std::cout << "Accepted new client connection from " << it->second.socket.getAddr() << std::endl;
-					// check for empty stream
-					it->second.stream.clear();
-					it->second.stream.peek();
-					if (!it->second.stream) {
-						std::cout << "Client " << it->second.socket.getAddr() << " disconnected." << std::endl;
-						remove(it);
-						continue;
-					}
+					clientData = it->second;
+					std::cout << "Accepted new client connection from " << it->second->socket.getAddr() << std::endl;
 				}
-				handleRequest(clientData->socket);
+				clientData->mutex.lock();
+				clientData->stream.clear();
+				handleRequest(clientData->stream);
+				clientData->mutex.unlock();
 
-				epoll_ctl(m_epollFD, EPOLL_CTL_MOD, event.data.fd, &event);
 			} else {
 				// Handle client request
-				ClientData *clientData = nullptr;
+				std::shared_ptr<ClientData> clientData = nullptr;
 				{
 					std::lock_guard lock(m_mutex);
 					// Handle client request
@@ -148,22 +139,14 @@ void TCPServer::listen() {
 					if (it == m_clients.end()) {
 						int fd = event.data.fd;
 						epoll_ctl(m_epollFD, EPOLL_CTL_DEL, fd, &event);
-						close(fd);
 						continue;
 					}
-					clientData = &it->second;
-					// check for empty stream, aka client disconnected
-					it->second.stream.clear();
-					it->second.stream.peek();
-					if (!it->second.stream) {
-						std::cout << "Client " << it->second.socket.getAddr() << " disconnected." << std::endl;
-						remove(it);
-						continue;
-					}
+					clientData = it->second;
 				}
 
-				handleRequest(clientData->socket);
-				epoll_ctl(m_epollFD, EPOLL_CTL_MOD, clientData->socket, &event);
+				std::lock_guard lock(clientData->mutex);
+				clientData->stream.clear();
+				handleRequest(clientData->stream);
 			}
 		}
 		std::unique_lock lock(m_mutex);
@@ -171,7 +154,7 @@ void TCPServer::listen() {
 	};
 
 	for (unsigned int i = 0; i < m_numThreads; i++) {
-		m_workers.emplace_back(worker);
+		m_workers.emplace_back(worker, i);
 	}
 }
 
@@ -191,13 +174,16 @@ void TCPServer::listClients() {
 	std::lock_guard lock(m_mutex);
 	std::cout << "Clients: " << m_clients.size() << "{";
 	for (auto &it : m_clients) {
-		std::cout << it.second.socket.getAddr() << ", ";
+		std::cout << it.second->socket.getAddr() << ", ";
+		int res = it.second->mutex.try_lock();
+		std::cout << res << ", ";
+		if (res) it.second->mutex.unlock();
 	}
 	std::cout << "}" << std::endl;
 }
 
-void HTTPServer::handleRequest(Socket &socket) {
-	SocketStream stream(socket);
+void HTTPServer::handleRequest(SocketStream &stream) {
+	const Socket &socket = stream.getSocket();
 
 	std::string line;
 	std::getline(stream, line);
