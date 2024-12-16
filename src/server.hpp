@@ -1,6 +1,7 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -39,6 +40,8 @@ class TCPServer {
 	std::atomic_flag					m_running = 1;
 	std::vector<std::thread>			m_workers;
 	unsigned int						m_numThreads;
+
+	std::atomic_int m_occup[100] = {0};
 };
 
 class HTTPServer : public TCPServer {

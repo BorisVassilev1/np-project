@@ -48,7 +48,8 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 }
 
 void TCPServer::listen() {
-	if (::listen(m_socket, 5) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
+	if (::listen(m_socket, 100) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
+
 	std::cout << "Listening on " << m_address << std::endl;
 
 	auto remove = [this](auto it) {
@@ -124,10 +125,15 @@ void TCPServer::listen() {
 					clientData = it->second;
 					std::cout << "Accepted new client connection from " << it->second->socket.getAddr() << std::endl;
 				}
-				clientData->mutex.lock();
+
+				m_occup[id]++;
+				std::lock_guard lock(clientData->mutex);
 				clientData->stream.clear();
-				handleRequest(clientData->stream);
-				clientData->mutex.unlock();
+				do {
+					clientData->stream.clear();
+					handleRequest(clientData->stream);
+				} while (clientData->stream);
+				m_occup[id]--;
 
 			} else {
 				// Handle client request
@@ -144,9 +150,14 @@ void TCPServer::listen() {
 					clientData = it->second;
 				}
 
+				m_occup[id]++;
 				std::lock_guard lock(clientData->mutex);
 				clientData->stream.clear();
-				handleRequest(clientData->stream);
+				do {
+					clientData->stream.clear();
+					handleRequest(clientData->stream);
+				} while (clientData->stream);
+				m_occup[id]--;
 			}
 		}
 		std::unique_lock lock(m_mutex);
@@ -172,14 +183,18 @@ void TCPServer::stop() {
 
 void TCPServer::listClients() {
 	std::lock_guard lock(m_mutex);
-	std::cout << "Clients: " << m_clients.size() << "{";
+	//	std::cout << "Clients: " << m_clients.size() << "{";
 	for (auto &it : m_clients) {
 		std::cout << it.second->socket.getAddr() << ", ";
-		int res = it.second->mutex.try_lock();
-		std::cout << res << ", ";
-		if (res) it.second->mutex.unlock();
 	}
-	std::cout << "}" << std::endl;
+	//	std::cout << "}" << std::endl;
+	for (std::size_t i = 0; i < m_numThreads; i++) {
+		std::cout << m_occup[i] << ", ";
+	}
+	std::cout << std::endl;
+	int res = m_mutex.try_lock();
+	std::cout << res << std::endl;
+	if (res) { m_mutex.unlock(); }
 }
 
 void HTTPServer::handleRequest(SocketStream &stream) {

@@ -8,7 +8,7 @@ project(
 # Prepare doctest for other targets to use
 
 SET(CMAKE_CXX_COMPILER clang++)
-SET(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -g")
+SET(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -fsanitize=address -g")
 
 file(GLOB_RECURSE FIGURES_SOURCES
 	./src/*.cpp

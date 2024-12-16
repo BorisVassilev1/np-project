@@ -110,6 +110,7 @@ class SocketStream : public std::iostream {
 
 	void status(int status, const std::string &msg) {
 		if (status < 0) { throw std::runtime_error("invalid status code"); }
+		this->clear();
 		(*this) << "HTTP/1.1 " << status << ' ' << msg
 				<< "\r\n"
 				   "Content-Type: text/html\r\n"
@@ -120,6 +121,7 @@ class SocketStream : public std::iostream {
 
 	void send(int status, const std::string &msg, const std::string &content_type, const std::string &content) {
 		if (status < 0) { throw std::runtime_error("invalid status code"); }
+		this->clear();
 		(*this) << "HTTP/1.1 " << status << ' ' << msg
 				<< "\r\n"
 				   "Content-Type: "
@@ -132,6 +134,7 @@ class SocketStream : public std::iostream {
 
 	void send(int status, const std::string &msg, const std::string &content_type, std::istream &content) {
 		if (status < 0) { throw std::runtime_error("invalid status code"); }
+		this->clear();
 		(*this) << "HTTP/1.1 " << status << ' ' << msg
 				<< "\r\n"
 				   "Content-Type: "

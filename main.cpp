@@ -54,6 +54,7 @@ int main() {
 		}
 		json << "]";
 
+		ss.clear();
 		ss.send(200, "OK", "application/json", json.str());
 	});
 
