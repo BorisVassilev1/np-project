@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <string_view>
 #include <string>
@@ -36,4 +37,19 @@ struct std::hash<std::string> {
   [[nodiscard]] size_t operator()(const std::string &txt) const {
     return std::hash<std::string_view>{}(txt.c_str());
   }
+};
+
+/**
+ * @brief SpinLock, copy pasta from lectures
+ */
+struct SpinLock {
+	std::atomic_flag flag;
+	void			 lock() {
+		while (flag.test_and_set())
+			;
+	}
+
+	void unlock() { flag.clear(); }
+
+	bool tryLock() { return !flag.test_and_set(); }
 };

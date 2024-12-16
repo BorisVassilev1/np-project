@@ -9,6 +9,7 @@
 
 #include <router.hpp>
 #include <socket.hpp>
+#include "utils.hpp"
 
 class TCPServer {
    public:
@@ -29,7 +30,7 @@ class TCPServer {
 
 		Socket		 socket;
 		SocketStream stream;
-		std::mutex mutex;
+		SpinLock mutex;
 	};
 	using ClientData_ptr = std::unique_ptr<ClientData>;
 

@@ -36,7 +36,7 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 	if (m_epollFD < 0) { throw std::runtime_error(std::string("cannot create epoll: ") + strerror(errno)); }
 
 	epoll_event event;
-	event.events  = EPOLLIN | EPOLLET;
+	event.events  = EPOLLIN;	 // | EPOLLET;
 	event.data.fd = m_socket;
 	if (epoll_ctl(m_epollFD, EPOLL_CTL_ADD, m_socket, &event) < 0) {
 		throw std::runtime_error(std::string("cannot add socket to epoll: ") + strerror(errno));
@@ -48,7 +48,7 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 }
 
 void TCPServer::listen() {
-	if (::listen(m_socket, 100) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
+	if (::listen(m_socket, 10) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
 
 	std::cout << "Listening on " << m_address << std::endl;
 
@@ -72,7 +72,9 @@ void TCPServer::listen() {
 		epoll_event event;
 		while (m_running.test()) {
 			// wait for client interaction or new connection
+			m_occup[id].store(0);
 			int numEvents = epoll_wait(m_epollFD, &event, 1, 1000);
+			m_occup[id].store(1);
 			if (numEvents == -1) {
 				throw std::runtime_error(std::string("epoll_wait failed: ") + strerror(errno));
 				break;
@@ -126,15 +128,6 @@ void TCPServer::listen() {
 					std::cout << "Accepted new client connection from " << it->second->socket.getAddr() << std::endl;
 				}
 
-				m_occup[id]++;
-				std::lock_guard lock(clientData->mutex);
-				clientData->stream.clear();
-				do {
-					clientData->stream.clear();
-					handleRequest(clientData->stream);
-				} while (clientData->stream);
-				m_occup[id]--;
-
 			} else {
 				// Handle client request
 				std::shared_ptr<ClientData> clientData = nullptr;
@@ -150,14 +143,9 @@ void TCPServer::listen() {
 					clientData = it->second;
 				}
 
-				m_occup[id]++;
 				std::lock_guard lock(clientData->mutex);
 				clientData->stream.clear();
-				do {
-					clientData->stream.clear();
-					handleRequest(clientData->stream);
-				} while (clientData->stream);
-				m_occup[id]--;
+				handleRequest(clientData->stream);
 			}
 		}
 		std::unique_lock lock(m_mutex);
@@ -183,18 +171,11 @@ void TCPServer::stop() {
 
 void TCPServer::listClients() {
 	std::lock_guard lock(m_mutex);
-	//	std::cout << "Clients: " << m_clients.size() << "{";
-	for (auto &it : m_clients) {
-		std::cout << it.second->socket.getAddr() << ", ";
-	}
-	//	std::cout << "}" << std::endl;
+	std::cout << "Clients count: " << m_clients.size() << " | thread occupancy: ";
 	for (std::size_t i = 0; i < m_numThreads; i++) {
-		std::cout << m_occup[i] << ", ";
+		std::cout << m_occup[i] << " ";
 	}
 	std::cout << std::endl;
-	int res = m_mutex.try_lock();
-	std::cout << res << std::endl;
-	if (res) { m_mutex.unlock(); }
 }
 
 void HTTPServer::handleRequest(SocketStream &stream) {
