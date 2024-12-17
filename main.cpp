@@ -37,12 +37,15 @@ int main(int argc, char **argv) {
 
 		std::vector<int> v;
 		std::string data;
-		data.resize(body_length);
+		data.reserve(body_length);
 
-		int flags = fcntl(ss.getSocket(), F_GETFL, 0);
-		fcntl(ss.getSocket(), F_SETFL, flags & ~O_NONBLOCK);
-		ss.read(data.data(), body_length);
-		fcntl(ss.getSocket(), F_SETFL, flags | O_NONBLOCK);
+		while(data.size() < body_length) {
+			if(!ss) ss.getSocket().waitREAD(1000);
+			ss.clear();
+			while(ss && data.size() < body_length)
+				data += ss.get();
+		}
+
 		//dbLog(dbg::LOG_DEBUG, body_length, " bytes read");
 		std::stringstream datastream(data);
 		ss.clear();

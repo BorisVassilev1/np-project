@@ -95,12 +95,15 @@ int main(int argc, char **argv) {
 			stream << requests[index];
 			stream.flush();
 			// std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			dbLog(dbg::LOG_DEBUG, "Sent request", j);
 		}
 	}
 
 	for (int i = num_connections; --i >= 0;) {
-		for (int j = 0; j < num_requests; j++)
+		for (int j = 0; j < num_requests; j++) {
 			read_data(*streams[i]);
+			dbLog(dbg::LOG_DEBUG, "Read data", i, j);
+		}
 		streams.pop_back();
 		sockets.pop_back();
 	}

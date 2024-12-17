@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cerrno>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <streambuf>
@@ -10,8 +11,27 @@
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <poll.h>
+
+#include <utils.hpp>
 
 #define BUFFER_SIZE 4096
+
+inline void waitREAD(int socket, int timeout = -1) {
+	struct pollfd pfd;
+	pfd.fd		= socket;
+	pfd.events	= POLLIN;
+	pfd.revents = 0;
+	if (poll(&pfd, 1, timeout) == -1) { throw std::runtime_error("poll failed"); }
+}
+
+inline void waitWRITE(int socket, int timeout = -1) {
+	struct pollfd pfd;
+	pfd.fd		= socket;
+	pfd.events	= POLLOUT;
+	pfd.revents = 0;
+	if (poll(&pfd, 1, timeout) == -1) { throw std::runtime_error("poll failed"); }
+}
 
 class SocketBuffer : public std::streambuf {
    public:
@@ -47,7 +67,15 @@ class SocketBuffer : public std::streambuf {
 		ssize_t bytes_to_write = pptr() - pbase();
 		if (bytes_to_write > 0) {
 			ssize_t bytes_written = send(socket_fd, output_buffer, bytes_to_write, 0);
-			if (bytes_written < 0) { return -1; }
+			if (bytes_written <= 0) {
+				waitWRITE(socket_fd);
+				bytes_written = send(socket_fd, output_buffer, bytes_to_write, 0);
+			}
+
+			if (bytes_written < 0) {
+				dbLog(dbg::LOG_WARNING, "Failed to write to socket: ", strerror(errno));
+				return -1;
+			}
 			pbump(-bytes_written);
 		}
 		return 0;
@@ -85,6 +113,10 @@ class Socket {
 	const sockaddr_in6 &getAddr() const { return this->addr; }
 	void				setAddr(const sockaddr_in6 &addr) { this->addr = addr; }
 
+	void waitREAD(int timeout = -1) const { ::waitREAD(this->socket, timeout); }
+
+	void waitWRITE(int timeout = -1) const { ::waitWRITE(this->socket, timeout); }
+
    private:
 	int			 socket = 0;
 	sockaddr_in6 addr;
@@ -93,9 +125,9 @@ class Socket {
 class SocketStream : public std::iostream {
    public:
 	SocketStream(const Socket &s) : std::iostream(&buffer), buffer((int)s), socket(&s) {}
-	//SocketStream(SocketStream &&s) : std::iostream(&s.buffer), buffer(std::move(s.buffer)), socket(s.socket) {
+	// SocketStream(SocketStream &&s) : std::iostream(&s.buffer), buffer(std::move(s.buffer)), socket(s.socket) {
 	//	s.socket = nullptr;
-	//}
+	// }
 
 	SocketStream(int socket) : std::iostream(&buffer), buffer(socket), socket(nullptr) {}
 
