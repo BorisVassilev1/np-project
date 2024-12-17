@@ -4,12 +4,15 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <shared_mutex>
 #include <thread>
 
 #include <router.hpp>
 #include <socket.hpp>
 #include "utils.hpp"
+
+#if !defined(__linux__)
+	#error "This example is for Linux only"
+#endif
 
 class TCPServer {
    public:
@@ -30,7 +33,8 @@ class TCPServer {
 
 		Socket		 socket;
 		SocketStream stream;
-		SpinLock mutex;
+		std::atomic_int lock; // 0 - free, 1 - locked
+		SpinLock		 spinlock;
 	};
 	using ClientData_ptr = std::unique_ptr<ClientData>;
 

@@ -16,7 +16,7 @@
 
 class Router {
    public:
-	using Handler = std::function<void(SocketStream &)>;
+	using Handler = std::function<void(SocketStream &, std::size_t)>;
 
 	class RequestType {
 	   public:
@@ -70,12 +70,12 @@ class Router {
 
 	void serve(const std::string &web_path, const std::string &path) { served.insert({web_path, path}); }
 
-	void handleRequest(RequestType t, std::string &path, SocketStream &s) {
+	void handleRequest(RequestType t, std::string &path, SocketStream &s, std::size_t body_length) {
 		std::size_t i = path.size() - 1;
 
 		auto handler = map.find({path, t});
 		if (handler != map.end()) {
-			handler->second(s);
+			handler->second(s, body_length);
 			return;
 		}
 

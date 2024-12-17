@@ -83,7 +83,7 @@ class Socket {
 	operator int() const { return this->socket; }
 
 	const sockaddr_in6 &getAddr() const { return this->addr; }
-	void		  setAddr(const sockaddr_in6 &addr) { this->addr = addr; }
+	void				setAddr(const sockaddr_in6 &addr) { this->addr = addr; }
 
    private:
 	int			 socket = 0;
@@ -93,9 +93,9 @@ class Socket {
 class SocketStream : public std::iostream {
    public:
 	SocketStream(const Socket &s) : std::iostream(&buffer), buffer((int)s), socket(&s) {}
-	SocketStream(SocketStream &&s) : std::iostream(&s.buffer), buffer(std::move(s.buffer)), socket(s.socket) {
-		s.socket = nullptr;
-	}
+	//SocketStream(SocketStream &&s) : std::iostream(&s.buffer), buffer(std::move(s.buffer)), socket(s.socket) {
+	//	s.socket = nullptr;
+	//}
 
 	SocketStream(int socket) : std::iostream(&buffer), buffer(socket), socket(nullptr) {}
 

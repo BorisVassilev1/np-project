@@ -1,3 +1,5 @@
+#include <utils.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <climits>
@@ -7,31 +9,41 @@
 #include <fcntl.h>
 #include <sstream>
 
-#if !defined(__linux__) && !defined(__APPLE__)
-	#error "This example is for Linux and MacOS only"
-#endif
-
-std::unique_ptr<HTTPServer> server = std::make_unique<HTTPServer>("::1", 8080);
+std::unique_ptr<HTTPServer> server = nullptr;
 
 void sigintHandler(int) {
-	server->stop();
+	if (server) server->stop();
 	exit(0);
 }
 
-int main() {
+int main(int argc, char **argv) {
+	int threads;
+	if(argc < 2) {
+		threads = std::thread::hardware_concurrency();
+	}
+	else threads = std::stoi(argv[1]);
+	server = std::make_unique<HTTPServer>("::1", 8080, threads);
+	
 	server->router.serve("/", "/public");
 	server->router.serve("/dir/", "/");
-	server->router.get("/asd", [&](SocketStream &ss) { server->router.renderStatus(ss, 500, "BAD"); });
+	server->router.get("/asd", [&](SocketStream &ss, std::size_t) { server->router.renderStatus(ss, 500, "BAD"); });
 
-	server->router.get("/wait", [](SocketStream &ss) {
-		std::this_thread::sleep_for(std::chrono::seconds(5));
+	server->router.get("/wait", [](SocketStream &ss, std::size_t) {
+		std::this_thread::sleep_for(std::chrono::seconds(2));
 		ss.send(200, "OK", "text/html", "DONT LOOK AT ME");
 	});
 
-	server->router.post("/sort", [](SocketStream &ss) {
+	server->router.post("/sort", [](SocketStream &ss, std::size_t body_length) {
+
 		std::vector<int> v;
-		std::string		 data;
-		std::getline(ss, data, '\n');
+		std::string data;
+		data.resize(body_length);
+
+		int flags = fcntl(ss.getSocket(), F_GETFL, 0);
+		fcntl(ss.getSocket(), F_SETFL, flags & ~O_NONBLOCK);
+		ss.read(data.data(), body_length);
+		fcntl(ss.getSocket(), F_SETFL, flags | O_NONBLOCK);
+		//dbLog(dbg::LOG_DEBUG, body_length, " bytes read");
 		std::stringstream datastream(data);
 		ss.clear();
 
@@ -71,18 +83,18 @@ int main() {
 
 	signal(SIGINT, sigintHandler);
 
-//	while (std::getline(std::cin, line)) {
-//		if (line == "exit") break;
-//		if (line == "ls") { server->listClients(); }
-//	}
-	while(true) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		
-		server->listClients();
-
+	while (std::getline(std::cin, line)) {
+		if (line == "exit") break;
+		if (line == "ls") { server->listClients(); }
 	}
+	// while(true) {
+	//	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	//
+	//	server->listClients();
 
-	std::cout << "Stopping server..." << std::endl;
+	//}
+
+	dbLog(dbg::LOG_INFO, "Stopping server...");
 	server->stop();
 
 	return 0;

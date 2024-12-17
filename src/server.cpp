@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <charconv>
 #include <csignal>
 #include <cstring>
 
@@ -11,8 +12,9 @@
 #include <sstream>
 #include <thread>
 #include "router.hpp"
+#include "utils.hpp"
 
-static void signalHandler(int sig) { std::cout << "Caught signal " << sig << std::endl; }
+static void signalHandler(int sig) { dbLog(dbg::LOG_WARNING, "Caught signal: ", sig); }
 
 TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 	m_numThreads = threads;
@@ -50,7 +52,7 @@ TCPServer::TCPServer(const std::string &ip, short port, int threads) {
 void TCPServer::listen() {
 	if (::listen(m_socket, 10) < 0) { throw std::runtime_error(std::string("cannot listen: ") + strerror(errno)); }
 
-	std::cout << "Listening on " << m_address << std::endl;
+	dbLog(dbg::LOG_INFO, "Listening on ", m_address);
 
 	auto remove = [this](auto it) {
 		epoll_event event;
@@ -80,14 +82,14 @@ void TCPServer::listen() {
 				break;
 			}
 			if (!numEvents) continue;
-			std::cout << "Worker thread started." << id << std::endl;
+			// dbLog(dbg::LOG_DEBUG, "Worker thread ", id, " got event.");
 
 			// Client disconnected
 			if (event.events & EPOLLRDHUP) {
 				std::lock_guard lock(m_mutex);
 				auto			it = m_clients.find(event.data.fd);
 				if (it != m_clients.end()) {
-					std::cout << "Client " << it->second->socket.getAddr() << " disconnected." << std::endl;
+					dbLog(dbg::LOG_INFO, "Client ", it->second->socket.getAddr(), " disconnected.");
 					remove(it);
 				}
 				continue;
@@ -120,12 +122,12 @@ void TCPServer::listen() {
 					auto [it, inserted] =
 						m_clients.emplace(int(socket), std::make_shared<ClientData>(std::move(socket)));
 					if (!inserted) {
-						std::cerr << "Failed to add client to client list." << std::endl;
+						dbLog(dbg::LOG_ERROR, "Failed to add client to client list.");
 						close(sock_fd);
 						continue;
 					}
 					clientData = it->second;
-					std::cout << "Accepted new client connection from " << it->second->socket.getAddr() << std::endl;
+					dbLog(dbg::LOG_INFO, "Accepted new client connection from ", it->second->socket.getAddr());
 				}
 
 			} else {
@@ -143,13 +145,24 @@ void TCPServer::listen() {
 					clientData = it->second;
 				}
 
-				std::lock_guard lock(clientData->mutex);
-				clientData->stream.clear();
-				handleRequest(clientData->stream);
+				int k = 0;
+				if (clientData->lock.compare_exchange_strong(k, 1)) {
+					clientData->stream.clear();
+					while (clientData->lock.exchange(!!clientData->stream)) {
+						handleRequest(clientData->stream);
+					}
+				}
+				//{
+				//	std::lock_guard lock(clientData->spinlock);
+				//	while (clientData->stream) {
+				//		clientData->stream.clear();
+				//		handleRequest(clientData->stream);
+				//	}
+				//}
 			}
 		}
 		std::unique_lock lock(m_mutex);
-		std::cout << "Worker thread stopped." << std::endl;
+		dbLog(dbg::LOG_INFO, "Worker thread ", id, " stopped.");
 	};
 
 	for (unsigned int i = 0; i < m_numThreads; i++) {
@@ -170,7 +183,9 @@ void TCPServer::stop() {
 }
 
 void TCPServer::listClients() {
-	std::lock_guard lock(m_mutex);
+	std::lock_guard lock1(m_mutex);
+	std::lock_guard lock2(dbg::getMutex());
+
 	std::cout << "Clients count: " << m_clients.size() << " | thread occupancy: ";
 	for (std::size_t i = 0; i < m_numThreads; i++) {
 		std::cout << m_occup[i] << " ";
@@ -184,7 +199,7 @@ void HTTPServer::handleRequest(SocketStream &stream) {
 	std::string line;
 	std::getline(stream, line);
 	if (line.empty()) return;
-	std::cout << socket.getAddr() << " -> " << line << std::endl;
+	dbLog(dbg::LOG_INFO, socket.getAddr(), " -> ", line);
 
 	std::istringstream	ss(line);
 	Router::RequestType type;
@@ -196,9 +211,14 @@ void HTTPServer::handleRequest(SocketStream &stream) {
 	std::string path;
 	ss >> path;
 
+	std::size_t body_len = 0;
 	while (std::getline(stream, line)) {
+		if (line.starts_with("Content-Length:")) {
+			std::string_view length = std::string_view(line).substr(16);
+			std::from_chars(length.begin(), length.end(), body_len);
+		}
 		if (line == "\r") break;
 	}
 
-	router.handleRequest(type, path, stream);
+	router.handleRequest(type, path, stream, body_len);
 }
