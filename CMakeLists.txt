@@ -10,14 +10,14 @@ project(
 SET(CMAKE_CXX_COMPILER clang++)
 SET(CMAKE_CXX_FLAGS "-std=c++20 -Wall -Wextra -Wpedantic -g")
 
-file(GLOB_RECURSE FIGURES_SOURCES
+file(GLOB_RECURSE PROJECT_SOURCES
 	./src/*.cpp
 )
 
 find_package(Threads REQUIRED)
 
 # Make server application
-add_executable(server main.cpp ${FIGURES_SOURCES})
+add_executable(server main.cpp ${PROJECT_SOURCES})
 set_target_properties(server PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../)
 #target_compile_features(server PRIVATE cxx_std_20)
 target_include_directories(server PUBLIC ./lib/)
@@ -25,7 +25,7 @@ target_include_directories(server PUBLIC ./src/)
 
 target_link_libraries(server PRIVATE Threads::Threads)
 
-add_executable(client client.cpp ${FIGURES_SOURCES})
+add_executable(client client.cpp ${PROJECT_SOURCES})
 set_target_properties(client PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../)
 #target_compile_features(client PRIVATE cxx_std_20)
 target_include_directories(client PUBLIC ./lib/)
