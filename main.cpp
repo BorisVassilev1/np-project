@@ -46,7 +46,6 @@ int main(int argc, char **argv) {
 				data += ss.get();
 		}
 
-		//dbLog(dbg::LOG_DEBUG, body_length, " bytes read");
 		std::stringstream datastream(data);
 		ss.clear();
 
@@ -90,12 +89,6 @@ int main(int argc, char **argv) {
 		if (line == "exit") break;
 		if (line == "ls") { server->listClients(); }
 	}
-	// while(true) {
-	//	std::this_thread::sleep_for(std::chrono::milliseconds(500));
-	//
-	//	server->listClients();
-
-	//}
 
 	dbLog(dbg::LOG_INFO, "Stopping server...");
 	server->stop();

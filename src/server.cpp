@@ -109,7 +109,7 @@ void TCPServer::listen() {
 				event.events  = EPOLLIN | EPOLLRDHUP | EPOLLET;
 				event.data.fd = socket;
 				if (epoll_ctl(m_epollFD, EPOLL_CTL_ADD, socket, &event) == -1) {
-					std::cerr << "Failed to add client socket to epoll instance." << strerror(errno) << std::endl;
+					dbLog(dbg::LOG_ERROR, "Failed to add client socket to epoll instance: ", strerror(errno));
 					close(socket);
 					continue;
 				}
@@ -122,12 +122,12 @@ void TCPServer::listen() {
 					auto [it, inserted] =
 						m_clients.emplace(int(socket), std::make_shared<ClientData>(std::move(socket)));
 					if (!inserted) {
-						dbLog(dbg::LOG_ERROR, "Failed to add client to client list.");
+						dbLog(dbg::LOG_ERROR, "Failed to add client to client list: ", strerror(errno));
 						close(sock_fd);
 						continue;
 					}
 					clientData = it->second;
-					dbLog(dbg::LOG_INFO, "Accepted new client connection from ", it->second->socket.getAddr());
+					dbLog(dbg::LOG_DEBUG, "Accepted new client connection from ", it->second->socket.getAddr());
 				}
 
 			} else {
@@ -162,7 +162,7 @@ void TCPServer::listen() {
 			}
 		}
 		std::unique_lock lock(m_mutex);
-		dbLog(dbg::LOG_INFO, "Worker thread ", id, " stopped.");
+		dbLog(dbg::LOG_DEBUG, "Worker thread ", id, " stopped.");
 	};
 
 	for (unsigned int i = 0; i < m_numThreads; i++) {

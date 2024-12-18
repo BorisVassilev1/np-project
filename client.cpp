@@ -8,7 +8,9 @@
 #include <iostream>
 #include <charconv>
 #include <thread>
-#include "src/socket.hpp"
+
+#include <socket.hpp>
+#include <utils.hpp>
 
 int received = 0;
 
@@ -23,36 +25,31 @@ void read_data(SocketStream &stream) {
 			std::from_chars(length.begin(), length.end(), len);
 		}
 		if (response == "\r") break;
-		// std::cout << response << std::endl;
 	}
-	++received;
 	if (len) {
 		char *buffer = new char[len];
 		stream.read(buffer, len);
 		std::cout.write(buffer, std::min(len, 40ul));
 		std::cout << std::endl;
 		delete[] buffer;
+		++received;
 	} else return;
-
-	// std::cout << std::endl << std::endl;
 }
 
 Socket createConnection(const std::string &ip, short port) {
 	int sock = socket(AF_INET6, SOCK_STREAM, 0);
 	if (sock == -1) {
-		std::cerr << "Error creating socket" << std::endl;
+		dbLog(dbg::LOG_ERROR, "Error creating socket");
 		return 1;
 	}
-	// std::cout << "Socket created" << std::endl;
 	struct sockaddr_in6 addr;
 	addr.sin6_family = AF_INET6;
 	addr.sin6_port	 = htons(port);
 	inet_pton(AF_INET6, ip.c_str(), &addr.sin6_addr);
 	if (connect(sock, (struct sockaddr *)&addr, sizeof(addr))) {
-		std::cerr << "Error connecting to server: " << strerror(errno) << std::endl;
+		dbLog(dbg::LOG_ERROR, "Error connecting to server: ", strerror(errno));
 		return 1;
 	}
-	// std::cout << "Connected to server" << std::endl;
 	return sock;
 }
 
@@ -102,7 +99,6 @@ int main(int argc, char **argv) {
 	for (int i = num_connections; --i >= 0;) {
 		for (int j = 0; j < num_requests; j++) {
 			read_data(*streams[i]);
-			dbLog(dbg::LOG_DEBUG, "Read data", i, j);
 		}
 		streams.pop_back();
 		sockets.pop_back();

@@ -54,9 +54,9 @@ namespace dbg {
  * @brief Log levels
  */
 enum {
-	LOG_INFO	= (0),
-	LOG_DEBUG	= (1),
-	LOG_WARNING = (2),
+	LOG_DEBUG	= (0),
+	LOG_WARNING = (1),
+	LOG_INFO	= (2),
 	LOG_ERROR	= (3),
 };
 
@@ -65,7 +65,7 @@ enum {
 #define COLOR_GREEN	 "\x1B[0;92m"
 #define COLOR_YELLOW "\x1B[0;93m"
 
-static const char *log_colors[]{COLOR_RESET, COLOR_GREEN, COLOR_YELLOW, COLOR_RED};
+static const char *log_colors[]{COLOR_GREEN, COLOR_YELLOW, COLOR_RESET, COLOR_RED};
 
 std::mutex &getMutex();
 
@@ -88,13 +88,17 @@ bool inline f_dbLog(std::ostream &out, Types... args) {
 
 #ifndef NDEBUG
 	#define DBG_DEBUG
-	#define DBG_LOG_LEVEL -1
+	#ifndef DBG_LOG_LEVEL
+		#define DBG_LOG_LEVEL -1
+	#endif
 	#define dbLog(severity, ...)                                                                                   \
 		severity >= DBG_LOG_LEVEL                                                                                  \
 			? (dbg::f_dbLog(std::cerr, dbg::log_colors[severity], "[", #severity, "] ", __VA_ARGS__, COLOR_RESET)) \
 			: 0;
 #else
-	#define DBG_LOG_LEVEL		 3
+	#ifndef DBG_LOG_LEVEL
+		#define DBG_LOG_LEVEL 3
+	#endif
 	#define dbLog(severity, ...) ((void)0)
 #endif
 

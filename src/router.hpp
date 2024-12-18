@@ -110,7 +110,7 @@ class Router {
 		struct dirent *file;
 		d = opendir(path.c_str());
 		if (!d) {
-			std::cerr << "cannot open dir: " << path << std::endl;
+			dbLog(dbg::LOG_ERROR, "cannot open dir: ", path, " : ", strerror(errno));
 			return 1;
 		}
 
