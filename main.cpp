@@ -17,13 +17,18 @@ void sigintHandler(int) {
 }
 
 int main(int argc, char **argv) {
-	int threads;
+	int threads, port;
 	if(argc < 2) {
 		threads = std::thread::hardware_concurrency();
 	}
 	else threads = std::stoi(argv[1]);
-	server = std::make_unique<HTTPServer>("::1", 8080, threads);
-	
+
+	if(argc < 3) {
+	    port = 8080;
+	} else port = std::stoi(argv[2]);
+
+	server = std::make_unique<HTTPServer>("::1", port, threads);
+
 	server->router.serve("/", "/public");
 	server->router.serve("/dir/", "/");
 	server->router.get("/asd", [&](SocketStream &ss, std::size_t) { server->router.renderStatus(ss, 500, "BAD"); });

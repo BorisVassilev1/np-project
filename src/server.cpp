@@ -89,7 +89,7 @@ void TCPServer::listen() {
 				std::lock_guard lock(m_mutex);
 				auto			it = m_clients.find(event.data.fd);
 				if (it != m_clients.end()) {
-					dbLog(dbg::LOG_INFO, "Client ", it->second->socket.getAddr(), " disconnected.");
+					dbLog(dbg::LOG_DEBUG, "Client ", it->second->socket.getAddr(), " disconnected.");
 					remove(it);
 				}
 				continue;

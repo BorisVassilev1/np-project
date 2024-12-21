@@ -18,7 +18,7 @@
 		document.querySelector('button').addEventListener('click', () => {
 			fetch("/sort", {
 				method: "POST",
-				body: numbers.value,
+				body: numbers.value.trim(),
 			}).then(res => {
 				if(res.ok) {
 					return res;

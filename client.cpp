@@ -54,8 +54,14 @@ Socket createConnection(const std::string &ip, short port) {
 }
 
 int main(int argc, char **argv) {
+	int num_size = 10000;
 	if (argc < 3) {
-		std::cerr << "Usage: " << argv[0] << " <num_connections> <num_requests>" << std::endl;
+		std::cerr << "Usage: " << argv[0] << " <num_connections> <num_requests> <request_index>" << std::endl;
+		std::cerr << "request_index can be 0..2. \r\n"
+					 "\t0 - a request that takes a long time to be processed\r\n"
+					 "\t1 - request the main page\r\n"
+					 "\t2 - sort an array of "
+				  << num_size << " numbers\r\n";
 		return 1;
 	}
 	int num_connections = std::stoi(argv[1]);
@@ -73,7 +79,6 @@ int main(int argc, char **argv) {
 	std::string requests[3] = {"GET /wait HTTP/1.1\r\nHost: localhost\r\n\r\n",
 							   "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"};
 
-	int num_size = 10000;
 	std::stringstream ss;
 	for (int i = 0; i < num_size; ++i) {
 		ss << (i ? " " : "") << (rand() % num_size);
